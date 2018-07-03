@@ -25,10 +25,11 @@ var ed = require('../../../helpers/ed');
 var diff = require('../../../helpers/diff');
 var transactionTypes = require('../../../helpers/transaction_types');
 var constants = require('../../../helpers/constants');
-var Vote = require('../../../logic/vote');
 var Transfer = require('../../../logic/transfer');
+var Vote = require('../../../logic/vote');
 
-var validPassphrase = 'robust weapon course unknown head trial pencil latin acid';
+var validPassphrase =
+	'robust weapon course unknown head trial pencil latin acid';
 var validKeypair = ed.makeKeypair(
 	crypto
 		.createHash('sha256')
@@ -153,7 +154,11 @@ describe('vote', () => {
 			(err, scope) => {
 				accountsModule = scope.modules.accounts;
 				delegatesModule = scope.modules.delegates;
-				vote = new Vote(modulesLoader.scope.logger, modulesLoader.scope.schema);
+				vote = new Vote(
+					modulesLoader.scope.logger,
+					modulesLoader.scope.schema,
+					scope.logic.account
+				);
 				voteBindings = {
 					delegate: delegatesModule,
 					account: accountsModule,
