@@ -22,11 +22,11 @@ var Promise = require('bluebird');
 var PQ = require('pg-promise').ParameterizedQuery;
 var accountFixtures = require('../../../../fixtures/accounts');
 var slots = require('../../../../../helpers/slots');
-var constants = require('../../../../../helpers/constants');
-var genesisBlock = require('../../../../data/genesis_block.json');
 var genesisDelegates = require('../../../../data/genesis_delegates.json')
 	.delegates;
 var application = require('../../../../common/application.js');
+
+const constants = global.constants;
 
 describe('system test (blocks) - process onReceiveBlock()', () => {
 	var library;
@@ -54,7 +54,7 @@ describe('system test (blocks) - process onReceiveBlock()', () => {
 				]);
 			})
 			.then(() => {
-				library.modules.blocks.lastBlock.set(genesisBlock);
+				library.modules.blocks.lastBlock.set(__testContext.config.genesisBlock);
 				done();
 			})
 			.catch(err => {
@@ -86,8 +86,9 @@ describe('system test (blocks) - process onReceiveBlock()', () => {
 			var keys = library.rewiredModules.delegates.__get__(
 				'__private.getKeysSortByVote'
 			);
+			const round = slots.calcRound(last_block.height + 1);
 			library.modules.delegates.generateDelegateList(
-				last_block.height + 1,
+				round,
 				keys,
 				(err, delegateList) => {
 					var nextForger = delegateList[(slot + offset) % slots.delegates];
@@ -183,8 +184,9 @@ describe('system test (blocks) - process onReceiveBlock()', () => {
 			library.modules.delegates.generateDelegateList
 		);
 		var lastBlock = library.modules.blocks.lastBlock.get();
+		const round = slots.calcRound(lastBlock.height);
 
-		return generateDelegateListPromisified(lastBlock.height, null)
+		return generateDelegateListPromisified(round, null)
 			.then(list => {
 				var delegatePublicKey = list[slot % slots.delegates];
 				return getKeypair(
@@ -932,7 +934,9 @@ describe('system test (blocks) - process onReceiveBlock()', () => {
 						expect(err).to.not.exist;
 						expect(blockIds).to.have.length(1);
 						expect(blockIds).to.not.include(differentChainBlock.id);
-						expect(blockIds).to.include.members([genesisBlock.id]);
+						expect(blockIds).to.include.members([
+							__testContext.config.genesisBlock.id,
+						]);
 						done();
 					});
 				});

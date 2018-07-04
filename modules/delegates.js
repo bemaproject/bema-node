@@ -21,7 +21,6 @@ const lisk = require('lisk-elements').default;
 const apiCodes = require('../helpers/api_codes.js');
 const ApiError = require('../helpers/api_error.js');
 const BlockReward = require('../logic/block_reward.js');
-const constants = require('../helpers/constants.js');
 const jobsQueue = require('../helpers/jobs_queue.js');
 const Delegate = require('../logic/delegate.js');
 const slots = require('../helpers/slots.js');
@@ -31,6 +30,7 @@ const transactionTypes = require('../helpers/transaction_types.js');
 let modules;
 let library;
 let self;
+const constants = global.constants;
 const __private = {};
 
 __private.assetTypes = {};
@@ -51,7 +51,6 @@ __private.forgeInterval = 1000;
  * @requires lodash
  * @requires helpers/api_codes
  * @requires helpers/api_error
- * @requires helpers/constants
  * @requires helpers/jobs_queue
  * @requires helpers/slots
  * @requires logic/block_reward
@@ -159,7 +158,8 @@ __private.getDelegatesFromPreviousRound = function(cb, tx) {
  * @todo Add description for the params
  */
 __private.validateBlockSlot = function(block, source, cb) {
-	self.generateDelegateList(block.height, source, (err, activeDelegates) => {
+	const round = slots.calcRound(block.height);
+	self.generateDelegateList(round, source, (err, activeDelegates) => {
 		if (err) {
 			return setImmediate(cb, err);
 		}
@@ -190,7 +190,8 @@ __private.validateBlockSlot = function(block, source, cb) {
  * @todo Add description for the params
  */
 __private.getBlockSlotData = function(slot, height, cb) {
-	self.generateDelegateList(height, null, (err, activeDelegates) => {
+	const round = slots.calcRound(height);
+	self.generateDelegateList(round, null, (err, activeDelegates) => {
 		if (err) {
 			return setImmediate(cb, err);
 		}
@@ -640,14 +641,14 @@ Delegates.prototype.updateForgingStatus = function(
 /**
  * Gets delegate list based on input function by vote and changes order.
  *
- * @param {number} height
+ * @param {number} round
  * @param {function} source - Source function for get delegates
  * @param {function} cb - Callback function
  * @param {Object} tx - Database transaction/task object
  * @returns {setImmediateCallback} cb, err, truncated delegate list
  * @todo Add description for the params
  */
-Delegates.prototype.generateDelegateList = function(height, source, cb, tx) {
+Delegates.prototype.generateDelegateList = function(round, source, cb, tx) {
 	// Set default function for getting delegates
 	source = source || __private.getKeysSortByVote;
 
@@ -656,7 +657,7 @@ Delegates.prototype.generateDelegateList = function(height, source, cb, tx) {
 			return setImmediate(cb, err);
 		}
 
-		const seedSource = slots.calcRound(height).toString();
+		const seedSource = round.toString();
 		let currentSeed = crypto
 			.createHash('sha256')
 			.update(seedSource, 'utf8')
@@ -765,39 +766,37 @@ Delegates.prototype.getForgers = function(query, cb) {
 	const currentSlot = slots.getSlotNumber();
 	const forgerKeys = [];
 
-	// We pass height + 1 as seed for generating the list, because we want the list to be generated for next block.
+	// We calculate round using height + 1, because we want the list to be generated for next block - it will be passed as seed for generating the list
 	// For example: last block height is 101 (still round 1, but already finished), then we want the list for round 2 (height 102)
-	self.generateDelegateList(
-		currentBlock.height + 1,
-		null,
-		(err, activeDelegates) => {
-			if (err) {
-				return setImmediate(cb, err);
-			}
+	const round = slots.calcRound(currentBlock.height + 1);
 
-			for (
-				let i = query.offset + 1;
-				i <= slots.delegates && i <= query.limit + query.offset;
-				i++
-			) {
-				if (activeDelegates[(currentSlot + i) % slots.delegates]) {
-					forgerKeys.push(activeDelegates[(currentSlot + i) % slots.delegates]);
-				}
-			}
-
-			library.db.delegates
-				.getDelegatesByPublicKeys(forgerKeys)
-				.then(rows => {
-					rows.forEach(forger => {
-						forger.nextSlot =
-							forgerKeys.indexOf(forger.publicKey) + currentSlot + 1;
-					});
-					rows = _.sortBy(rows, 'nextSlot');
-					return setImmediate(cb, null, rows);
-				})
-				.catch(error => setImmediate(cb, error));
+	self.generateDelegateList(round, null, (err, activeDelegates) => {
+		if (err) {
+			return setImmediate(cb, err);
 		}
-	);
+
+		for (
+			let i = query.offset + 1;
+			i <= slots.delegates && i <= query.limit + query.offset;
+			i++
+		) {
+			if (activeDelegates[(currentSlot + i) % slots.delegates]) {
+				forgerKeys.push(activeDelegates[(currentSlot + i) % slots.delegates]);
+			}
+		}
+
+		library.db.delegates
+			.getDelegatesByPublicKeys(forgerKeys)
+			.then(rows => {
+				rows.forEach(forger => {
+					forger.nextSlot =
+						forgerKeys.indexOf(forger.publicKey) + currentSlot + 1;
+				});
+				rows = _.sortBy(rows, 'nextSlot');
+				return setImmediate(cb, null, rows);
+			})
+			.catch(error => setImmediate(cb, error));
+	});
 };
 
 /**
@@ -907,7 +906,7 @@ Delegates.prototype.onBind = function(scope) {
  * @param {function} cb - Callback function
  */
 __private.nextForge = function(cb) {
-	async.series([__private.forge, modules.transactions.fillPool], cb);
+	async.series([modules.transactions.fillPool, __private.forge], cb);
 };
 
 /**

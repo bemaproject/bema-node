@@ -17,10 +17,10 @@
 var _ = require('lodash');
 var bignum = require('../../helpers/bignum.js');
 var swaggerHelper = require('../../helpers/swagger');
-var constants = require('../../helpers/constants.js');
 
 // Private Fields
 var modules;
+const constants = global.constants;
 
 /**
  * Description of the function.
@@ -77,8 +77,6 @@ DelegatesController.getDelegates = function(context, next) {
 			delete delegate.publicKey;
 			delete delegate.address;
 
-			delegate.missedBlocks = parseInt(delegate.missedBlocks);
-			delegate.producedBlocks = parseInt(delegate.producedBlocks);
 			delegate.rank = parseInt(delegate.rank);
 
 			return delegate;
